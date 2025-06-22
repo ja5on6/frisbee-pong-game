@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+
+        #gameContainer {
+            position: relative;
+        }
+
+        #gameCanvas {
+            border: 2px solid #fff;
+            background-color: #000;
+        }
+
+        #score {
+            color: #fff;
+            font-size: 24px;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        #instructions {
+            color: #fff;
+            text-align: center;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="score">Player: <span id="playerScore">0</span> | AI: <span id="aiScore">0</span></div>
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <div id="instructions">Move your mouse up and down to control the left paddle. Watch out for the frisbee's curve!</div>
+    </div>
+
+    <script>
+        // Get canvas and context
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game variables
+        const PADDLE_WIDTH = 10;
+        const PADDLE_HEIGHT = 80;
+        const FRISBEE_SIZE = 15;
+        const PADDLE_SPEED = 5;
+        const AI_SPEED = 3;
+
+        // Game objects
+        const game = {
+            playerScore: 0,
+            aiScore: 0,
+            
+            // Player paddle (left)
+            playerPaddle: {
+                x: 20,
+                y: canvas.height / 2 - PADDLE_HEIGHT / 2,
+                width: PADDLE_WIDTH,
+                height: PADDLE_HEIGHT
+            },
+            
+            // AI paddle (right)
+            aiPaddle: {
+                x: canvas.width - 30,
+                y: canvas.height / 2 - PADDLE_HEIGHT / 2,
+                width: PADDLE_WIDTH,
+                height: PADDLE_HEIGHT
+            },
+            
+            // Frisbee
+            frisbee: {
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                dx: 4,
+                dy: 3,
+                size: FRISBEE_SIZE,
+                spin: 0.1, // Spin affects curve
+                curve: 0, // Current curve amount
+                maxCurve: 2, // Maximum curve strength
+                spinDirection: 1 // 1 or -1 for clockwise/counterclockwise
+            }
+        };
+
+        // Mouse position tracking
+        let mouseY = canvas.height / 2;
+
+        // Event listeners
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseY = e.clientY - rect.top;
+        });
+
+        // Update player paddle position based on mouse
+        function updatePlayerPaddle() {
+            game.playerPaddle.y = mouseY - PADDLE_HEIGHT / 2;
+            
+            // Keep paddle within canvas bounds
+            if (game.playerPaddle.y < 0) {
+                game.playerPaddle.y = 0;
+            }
+            if (game.playerPaddle.y > canvas.height - PADDLE_HEIGHT) {
+                game.playerPaddle.y = canvas.height - PADDLE_HEIGHT;
+            }
+        }
+
+        // Update AI paddle (follows the frisbee with prediction for curve and curl-back)
+        function updateAIPaddle() {
+            const paddleCenter = game.aiPaddle.y + PADDLE_HEIGHT / 2;
+            
+            // Enhanced prediction that accounts for curl-back after wall bounces
+            let predictedY = game.frisbee.y + (game.frisbee.dy * 15);
+            
+            // If frisbee is near walls, predict curl-back behavior
+            if (game.frisbee.y <= 50 && game.frisbee.dy < 0) {
+                // Near top wall, will curl back down
+                predictedY += Math.abs(game.frisbee.curve) * 10;
+            } else if (game.frisbee.y >= canvas.height - 50 && game.frisbee.dy > 0) {
+                // Near bottom wall, will curl back up
+                predictedY -= Math.abs(game.frisbee.curve) * 10;
+            } else {
+                // Normal curve prediction
+                predictedY += (game.frisbee.curve * 8);
+            }
+            
+            if (paddleCenter < predictedY - 40) {
+                game.aiPaddle.y += AI_SPEED;
+            } else if (paddleCenter > predictedY + 40) {
+                game.aiPaddle.y -= AI_SPEED;
+            }
+            
+            // Keep AI paddle within canvas bounds
+            if (game.aiPaddle.y < 0) {
+                game.aiPaddle.y = 0;
+            }
+            if (game.aiPaddle.y > canvas.height - PADDLE_HEIGHT) {
+                game.aiPaddle.y = canvas.height - PADDLE_HEIGHT;
+            }
+        }
+
+        // Update frisbee position and handle collisions with curved movement
+        function updateFrisbee() {
+            // Apply curve to the frisbee movement
+            game.frisbee.curve += game.frisbee.spin * game.frisbee.spinDirection;
+            
+            // Limit curve amount but allow for stronger curves after wall bounces
+            const maxCurveLimit = game.frisbee.maxCurve * 2; // Allow even stronger curves
+            if (Math.abs(game.frisbee.curve) > maxCurveLimit) {
+                game.frisbee.curve = maxCurveLimit * Math.sign(game.frisbee.curve);
+            }
+            
+            // Apply movement with curve
+            game.frisbee.x += game.frisbee.dx;
+            game.frisbee.y += game.frisbee.dy + game.frisbee.curve;
+            
+            // Add slight horizontal curve based on spin (Magnus effect)
+            const magnusEffect = game.frisbee.spin * game.frisbee.spinDirection * 0.3;
+            game.frisbee.x += magnusEffect;
+            
+            // Frisbee collision with top and bottom walls - GUARANTEED curl-back
+            if (game.frisbee.y <= 0 || game.frisbee.y >= canvas.height - game.frisbee.size) {
+                // Ensure frisbee stays within bounds
+                if (game.frisbee.y <= 0) {
+                    game.frisbee.y = 1; // Keep slightly inside bounds
+                } else {
+                    game.frisbee.y = canvas.height - game.frisbee.size - 1;
+                }
+                
+                // Reverse vertical direction
+                game.frisbee.dy = -game.frisbee.dy;
+                
+                // FORCE strong curl-back effect - no exceptions
+                if (game.frisbee.y <= 1) {
+                    // Hit top wall - MUST curl back down
+                    game.frisbee.spinDirection = 1;
+                    game.frisbee.curve = -3; // Very strong initial curve down
+                    game.frisbee.spin = 0.15; // Strong consistent spin
+                } else {
+                    // Hit bottom wall - MUST curl back up  
+                    game.frisbee.spinDirection = -1;
+                    game.frisbee.curve = 3; // Very strong initial curve up
+                    game.frisbee.spin = 0.15; // Strong consistent spin
+                }
+                
+                // Add horizontal influence for more dramatic effect
+                const horizontalBoost = Math.abs(game.frisbee.dx) * 0.5;
+                if (game.frisbee.dx > 0) {
+                    game.frisbee.curve += horizontalBoost * game.frisbee.spinDirection;
+                } else {
+                    game.frisbee.curve -= horizontalBoost * game.frisbee.spinDirection;
+                }
+            }
+            
+            // Frisbee collision with player paddle
+            if (game.frisbee.x <= game.playerPaddle.x + game.playerPaddle.width &&
+                game.frisbee.x >= game.playerPaddle.x &&
+                game.frisbee.y >= game.playerPaddle.y &&
+                game.frisbee.y <= game.playerPaddle.y + game.playerPaddle.height) {
+                
+                game.frisbee.dx = -game.frisbee.dx;
+                
+                // Add angle and spin based on where the frisbee hits the paddle
+                const hitPos = (game.frisbee.y - game.playerPaddle.y) / game.playerPaddle.height;
+                game.frisbee.dy = (hitPos - 0.5) * 8;
+                
+                // Add spin based on hit position
+                game.frisbee.spinDirection = hitPos > 0.5 ? 1 : -1;
+                game.frisbee.curve = 0; // Reset curve on paddle hit
+                game.frisbee.spin = 0.05 + Math.abs(hitPos - 0.5) * 0.1; // Variable spin
+            }
+            
+            // Frisbee collision with AI paddle
+            if (game.frisbee.x + game.frisbee.size >= game.aiPaddle.x &&
+                game.frisbee.x <= game.aiPaddle.x + game.aiPaddle.width &&
+                game.frisbee.y >= game.aiPaddle.y &&
+                game.frisbee.y <= game.aiPaddle.y + game.aiPaddle.height) {
+                
+                game.frisbee.dx = -game.frisbee.dx;
+                
+                // Add angle and spin based on where the frisbee hits the paddle
+                const hitPos = (game.frisbee.y - game.aiPaddle.y) / game.aiPaddle.height;
+                game.frisbee.dy = (hitPos - 0.5) * 8;
+                
+                // Add spin based on hit position
+                game.frisbee.spinDirection = hitPos > 0.5 ? -1 : 1;
+                game.frisbee.curve = 0; // Reset curve on paddle hit
+                game.frisbee.spin = 0.05 + Math.abs(hitPos - 0.5) * 0.1; // Variable spin
+            }
+            
+            // Frisbee goes off left side (AI scores)
+            if (game.frisbee.x < 0) {
+                game.aiScore++;
+                resetFrisbee();
+                updateScore();
+            }
+            
+            // Frisbee goes off right side (Player scores)
+            if (game.frisbee.x > canvas.width) {
+                game.playerScore++;
+                resetFrisbee();
+                updateScore();
+            }
+        }
+
+        // Reset frisbee to center with random direction and spin
+        function resetFrisbee() {
+            game.frisbee.x = canvas.width / 2;
+            game.frisbee.y = canvas.height / 2;
+            game.frisbee.dx = (Math.random() > 0.5 ? 1 : -1) * 4;
+            game.frisbee.dy = (Math.random() - 0.5) * 6;
+            game.frisbee.curve = 0;
+            game.frisbee.spin = 0.05 + Math.random() * 0.1;
+            game.frisbee.spinDirection = Math.random() > 0.5 ? 1 : -1;
+        }
+
+        // Update score display
+        function updateScore() {
+            document.getElementById('playerScore').textContent = game.playerScore;
+            document.getElementById('aiScore').textContent = game.aiScore;
+        }
+
+        // Draw everything on the canvas
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw center line
+            ctx.strokeStyle = '#fff';
+            ctx.setLineDash([5, 15]);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Draw player paddle
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(game.playerPaddle.x, game.playerPaddle.y, 
+                        game.playerPaddle.width, game.playerPaddle.height);
+            
+            // Draw AI paddle
+            ctx.fillRect(game.aiPaddle.x, game.aiPaddle.y, 
+                        game.aiPaddle.width, game.aiPaddle.height);
+            
+            // Draw frisbee with rotation effect
+            ctx.save();
+            ctx.translate(game.frisbee.x + game.frisbee.size/2, game.frisbee.y + game.frisbee.size/2);
+            
+            // Rotate based on spin and movement
+            const rotation = (game.frisbee.x * 0.02) + (game.frisbee.curve * 2);
+            ctx.rotate(rotation);
+            
+            // Draw frisbee as an ellipse to show perspective
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            const scaleX = 1 + Math.sin(rotation) * 0.3; // Perspective effect
+            ctx.scale(scaleX, 1);
+            ctx.arc(0, 0, game.frisbee.size/2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw frisbee center dot
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(0, 0, 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw spin lines to show rotation
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 4; i++) {
+                ctx.beginPath();
+                const angle = (i * Math.PI / 2) + rotation;
+                const x1 = Math.cos(angle) * 3;
+                const y1 = Math.sin(angle) * 3;
+                const x2 = Math.cos(angle) * (game.frisbee.size/2 - 2);
+                const y2 = Math.sin(angle) * (game.frisbee.size/2 - 2);
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+            
+            ctx.restore();
+        }
+
+        // Main game loop
+        function gameLoop() {
+            updatePlayerPaddle();
+            updateAIPaddle();
+            updateFrisbee();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game
+        gameLoop();
+    </script>
+</body>
+</html>
